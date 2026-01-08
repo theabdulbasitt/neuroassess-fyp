@@ -3,11 +3,19 @@ const nodemailer = require("nodemailer");
 // Create reusable transporter object using SMTP transport
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: false, // true for 465, false for other ports
+  port: parseInt(process.env.EMAIL_PORT || "587"),
+  secure: process.env.EMAIL_PORT === "465", // true for 465, false for other ports
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
+  },
+  pool: true, // Reuse connections
+  maxConnections: 5,
+  connectionTimeout: 20000, // 20 seconds
+  greetingTimeout: 20000, // 20 seconds
+  socketTimeout: 30000, // 30 seconds
+  tls: {
+    rejectUnauthorized: false, // Help with some SMTP server certificate issues
   },
 });
 
