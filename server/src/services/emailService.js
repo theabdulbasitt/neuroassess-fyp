@@ -1,23 +1,95 @@
 const nodemailer = require("nodemailer");
 
-// Create reusable transporter object using SMTP transport
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT || "587"),
-  secure: process.env.EMAIL_PORT === "465", // true for 465, false for other ports
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  pool: true, // Reuse connections
-  maxConnections: 5,
-  connectionTimeout: 180000, // 180 seconds (3 minutes)
-  greetingTimeout: 180000, // 180 seconds
-  socketTimeout: 180000, // 180 seconds
-  tls: {
-    rejectUnauthorized: false, // Help with some SMTP server certificate issues
-  },
-});
+// Log SMTP configuration for debugging
+const emailHost = process.env.EMAIL_HOST;
+const emailPort = parseInt(process.env.EMAIL_PORT || "587");
+const emailUser = process.env.EMAIL_USER;
+const isSecure = process.env.EMAIL_PORT === "465";
+const isProduction = process.env.NODE_ENV === "production";
+
+console.log("📧 SMTP Configuration:");
+console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
+console.log(`   Host: ${emailHost}`);
+console.log(`   Port: ${emailPort}`);
+console.log(`   Secure: ${isSecure}`);
+console.log(`   User: ${emailUser}`);
+console.log(`   Pooling: ${!isProduction ? "enabled" : "disabled (serverless)"}`);
+
+// Create transporter factory function for serverless compatibility
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    host: emailHost,
+    port: emailPort,
+    secure: isSecure, // true for 465, false for other ports
+    auth: {
+      user: emailUser,
+      pass: process.env.EMAIL_PASS,
+    },
+    pool: !isProduction, // Disable pooling in production/serverless
+    maxConnections: isProduction ? 1 : 5,
+    connectionTimeout: 60000, // 60 seconds
+    greetingTimeout: 30000, // 30 seconds
+    socketTimeout: 60000, // 60 seconds
+    logger: true, // Enable logging for debugging
+    debug: process.env.EMAIL_DEBUG === "true", // Show SMTP traffic only if needed
+    tls: {
+      rejectUnauthorized: false,
+      minVersion: "TLSv1.2",
+    },
+    requireTLS: emailPort === 587,
+  });
+};
+
+// Helper function to send email with retry logic and explicit Promise wrapping
+const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
+  return new Promise(async (resolve, reject) => {
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📤 [Attempt ${attempt}/${maxRetries}] Sending email to: ${mailOptions.to}`);
+
+        // Create a fresh transporter for each send (serverless best practice)
+        const transporter = createTransporter();
+
+        // Wrap sendMail in explicit Promise
+        const info = await new Promise((resolveEmail, rejectEmail) => {
+          transporter.sendMail(mailOptions, (error, info) => {
+            // Close transporter connection immediately after send
+            transporter.close();
+
+            if (error) {
+              console.error(`❌ Email send error (attempt ${attempt}):`, error.message);
+              rejectEmail(error);
+            } else {
+              console.log(`✅ Email sent successfully to ${mailOptions.to}`);
+              console.log(`   Message ID: ${info.messageId}`);
+              resolveEmail(info);
+            }
+          });
+        });
+
+        // Success - return immediately
+        return resolve({ success: true, messageId: info.messageId });
+
+      } catch (error) {
+        lastError = error;
+        console.error(`❌ Attempt ${attempt} failed:`, error.message);
+
+        // If this isn't the last attempt, wait before retrying (exponential backoff)
+        if (attempt < maxRetries) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5 seconds
+          console.log(`⏳ Retrying in ${waitTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+
+    // All retries failed
+    console.error(`❌ All ${maxRetries} email send attempts failed`);
+    reject(lastError);
+  });
+};
 
 // Send OTP email
 exports.sendOTPEmail = async (
@@ -26,8 +98,10 @@ exports.sendOTPEmail = async (
   subject = "Verify Your Email - NeuroAssess"
 ) => {
   try {
+    console.log(`📧 Preparing OTP email for: ${email}`);
+
     const mailOptions = {
-      from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`, // Correct format
+      from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: subject,
       html: `
@@ -44,10 +118,11 @@ exports.sendOTPEmail = async (
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    return { success: true };
+    // Use retry wrapper with explicit Promise handling
+    const result = await sendEmailWithRetry(mailOptions);
+    return result;
   } catch (error) {
-    console.error("Send email error:", error);
+    console.error("❌ Send OTP email error:", error);
     return { success: false, error };
   }
 };
@@ -55,6 +130,8 @@ exports.sendOTPEmail = async (
 // Send Reset Password email
 exports.sendResetPasswordEmail = async (email, resetUrl) => {
   try {
+    console.log(`📧 Preparing password reset email for: ${email}`);
+
     const mailOptions = {
       from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -73,10 +150,10 @@ exports.sendResetPasswordEmail = async (email, resetUrl) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    return { success: true };
+    const result = await sendEmailWithRetry(mailOptions);
+    return result;
   } catch (error) {
-    console.error("Send reset password email error:", error);
+    console.error("❌ Send reset password email error:", error);
     return { success: false, error };
   }
 };
@@ -84,6 +161,8 @@ exports.sendResetPasswordEmail = async (email, resetUrl) => {
 // Send psychiatrist approval email
 exports.sendApprovalEmail = async (email, name) => {
   try {
+    console.log(`📧 Preparing approval email for: ${email}`);
+
     const mailOptions = {
       from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -102,10 +181,10 @@ exports.sendApprovalEmail = async (email, name) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    return { success: true };
+    const result = await sendEmailWithRetry(mailOptions);
+    return result;
   } catch (error) {
-    console.error("Send approval email error:", error);
+    console.error("❌ Send approval email error:", error);
     return { success: false, error };
   }
 };
@@ -113,6 +192,8 @@ exports.sendApprovalEmail = async (email, name) => {
 // Send psychiatrist rejection email
 exports.sendRejectionEmail = async (email, name, reason) => {
   try {
+    console.log(`📧 Preparing rejection email for: ${email}`);
+
     const mailOptions = {
       from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -131,19 +212,23 @@ exports.sendRejectionEmail = async (email, name, reason) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    return { success: true };
+    const result = await sendEmailWithRetry(mailOptions);
+    return result;
   } catch (error) {
-    console.error("Send rejection email error:", error);
+    console.error("❌ Send rejection email error:", error);
     return { success: false, error };
   }
 };
 
-// Verify transporter connection
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ SMTP connection error:", error);
-  } else {
+// Verify SMTP connection on startup (async version for serverless)
+(async () => {
+  try {
+    const transporter = createTransporter();
+    await transporter.verify();
     console.log("✅ SMTP server is ready to send emails");
+    transporter.close();
+  } catch (error) {
+    console.error("❌ SMTP connection error:", error.message);
+    console.error("   Email service may not work properly. Please check your SMTP configuration.");
   }
-});
+})();

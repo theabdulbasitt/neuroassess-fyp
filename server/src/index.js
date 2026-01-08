@@ -63,10 +63,11 @@ app.get("/health", (req, res) => {
 });
 
 // Schedule cleanup of temporary users
-// Run every 5 minute
-const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minute
-// const CLEANUP_INTERVAL = 1 * 5 * 1000; // 5 minute
+// Run every 12 hours
+const CLEANUP_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours (43200000ms)
+
 setInterval(async () => {
+  console.log("--------------------------------------------------");
   console.log("Running scheduled cleanup of temporary users");
   try {
     const now = new Date();
@@ -75,8 +76,6 @@ setInterval(async () => {
     console.log(`Cleanup time => ${formattedTime} - ${formattedDate},`);
     const cleanPatient = await authModel.cleanupTemporaryPatients();
     const cleanPsy = await authModel.cleanupTemporaryPsychiatrists();
-    // console.log("Cleanup result:", cleanPatient);
-    // console.log("Cleanup result:", cleanPsy);
     console.log("--------------------------------------------------");
   } catch (error) {
     console.error("Error in scheduled cleanup:", error);

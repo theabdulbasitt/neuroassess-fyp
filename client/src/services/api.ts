@@ -38,11 +38,11 @@ const api = axios.create({
 // Add a request interceptor to include auth token in requests
 api.interceptors.request.use(
   (config) => {
-    console.log(
-      `API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url
-      }`,
-      config.data
-    );
+    // console.log(
+    //   `API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url
+    //   }`,
+    //   config.data
+    // );
 
     // Get token from localStorage
     const token = localStorage.getItem("token");
@@ -50,9 +50,9 @@ api.interceptors.request.use(
     // If token exists, add it to the request headers
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log("Added token to request headers");
+      // console.log("Added token to request headers");
     } else {
-      console.warn("No authentication token found in localStorage");
+      // console.warn("No authentication token found in localStorage");
     }
 
     return config;
