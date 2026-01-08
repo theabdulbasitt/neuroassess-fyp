@@ -28,7 +28,7 @@ const ApiConnectivityCheck = () => {
         console.log("Checking API connection to:", `${baseUrl}/health`);
         // Use the base URL for the health check (root level /health exit)
         const response = await axios.get(`${baseUrl}/health`, {
-          timeout: 30000, // 30 seconds timeout
+          timeout: 180000, // 180 seconds timeout
         });
         if (response.data.status === "ok") {
           setIsConnected(true);

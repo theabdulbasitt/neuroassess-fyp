@@ -20,7 +20,7 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
   withCredentials: true, // This is important for cookies to be sent
-  timeout: 60000, // 60 seconds timeout (increased from 15s to prevent cold start issues)
+  timeout: 180000, // 3 minutes timeout (increased to handle server delays)
 });
 
 // Add interceptors for debugging
