@@ -6,7 +6,12 @@
 
 import axios, { AxiosError } from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const getApiUrl = () => {
+  const url = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  return url.endsWith("/api") ? url : `${url.replace(/\/$/, "")}/api`;
+};
+
+const API_URL = getApiUrl();
 
 // Create axios instance
 const api = axios.create({
@@ -15,7 +20,7 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
   withCredentials: true, // This is important for cookies to be sent
-  timeout: 15000, // 15 seconds timeout
+  timeout: 60000, // 60 seconds timeout (increased from 15s to prevent cold start issues)
 });
 
 // Add interceptors for debugging

@@ -16,20 +16,19 @@ const ApiConnectivityCheck = () => {
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const apiUrl = import.meta.env.VITE_API_URL;
-  // Extract the base URL without the /api suffix
-    const baseUrl = apiUrl || "/api";
-  // const baseUrl = apiUrl
-  //   ? apiUrl.replace(/\/api$/, "")
-  //   : "http://localhost:5000";
+  // Extract the base URL without the /api suffix or trailing slash
+  const baseUrl = apiUrl
+    ? apiUrl.replace(/\/api\/?$/, "").replace(/\/$/, "")
+    : "http://localhost:5000";
 
 
   useEffect(() => {
     const checkApiConnection = async () => {
       try {
         console.log("Checking API connection to:", `${baseUrl}/health`);
-        // Use the base URL for the health check, not the API URL
+        // Use the base URL for the health check (root level /health exit)
         const response = await axios.get(`${baseUrl}/health`, {
-          timeout: 15000, // Increase timeout to 15 seconds
+          timeout: 30000, // 30 seconds timeout
         });
         if (response.data.status === "ok") {
           setIsConnected(true);
@@ -42,15 +41,13 @@ const ApiConnectivityCheck = () => {
         console.error("API connection error:", err);
         let errorMessage = "Cannot connect to API";
 
-        // Provide more specific error messages
         if (axios.isAxiosError(err)) {
           if (err.code === "ECONNABORTED") {
-            errorMessage = "API connection timeout - server may be down";
+            errorMessage = "API connection timeout";
           } else if (err.response) {
-            errorMessage = `API error: ${err.response.status} ${err.response.statusText}`;
+            errorMessage = `API error: ${err.response.status}`;
           } else if (err.request) {
-            errorMessage =
-              "No response from API server - check if it's running";
+            errorMessage = "No response from API server";
           }
         }
 
@@ -60,8 +57,8 @@ const ApiConnectivityCheck = () => {
     };
 
     checkApiConnection();
-    // Check connection every 30 seconds
-    const interval = setInterval(checkApiConnection, 30000);
+    // Check connection every 60 seconds (optimized from 30s)
+    const interval = setInterval(checkApiConnection, 60000);
     return () => clearInterval(interval);
   }, [baseUrl]);
 

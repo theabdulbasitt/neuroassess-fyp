@@ -17,7 +17,12 @@ interface CustomAxiosInstance extends AxiosInstance {
 }
 
 // Get the API URL from environment variables or use a fallback
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const getApiUrl = () => {
+  const url = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  return url.endsWith("/api") ? url : `${url.replace(/\/$/, "")}/api`;
+};
+
+const apiUrl = getApiUrl();
 console.log("Using API URL:", apiUrl);
 
 // Create an axios instance with default config
@@ -27,15 +32,14 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
   withCredentials: true, // Enable cookies for cross-origin requests
-  timeout: 30000, // Increase timeout to 30 seconds
+  timeout: 180000, // 180 seconds timeout (increased from 30s to handle server delays)
 }) as CustomAxiosInstance;
 
 // Add a request interceptor to include auth token in requests
 api.interceptors.request.use(
   (config) => {
     console.log(
-      `API Request: ${config.method?.toUpperCase()} ${config.baseURL}${
-        config.url
+      `API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url
       }`,
       config.data
     );
