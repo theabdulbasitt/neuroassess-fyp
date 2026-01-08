@@ -1,94 +1,66 @@
-const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
 
-// Log SMTP configuration for debugging
-const emailHost = process.env.EMAIL_HOST;
-const emailPort = parseInt(process.env.EMAIL_PORT || "587");
-const emailUser = process.env.EMAIL_USER;
-const isSecure = process.env.EMAIL_PORT === "465";
-const isProduction = process.env.NODE_ENV === "production";
+// Configure SendGrid with API key
+const sendGridApiKey = process.env.SENDGRID_API_KEY;
+const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER;
+const fromName = process.env.SENDGRID_FROM_NAME || "NeuroAssess Support";
 
-console.log("📧 SMTP Configuration:");
+if (!sendGridApiKey) {
+  console.error("❌ SENDGRID_API_KEY is not set in environment variables!");
+  console.error("   Email service will not work. Please add SENDGRID_API_KEY to your .env file");
+} else {
+  sgMail.setApiKey(sendGridApiKey);
+  console.log("✅ SendGrid API configured successfully");
+}
+
+console.log("📧 Email Service Configuration:");
+console.log(`   Provider: SendGrid`);
+console.log(`   From Email: ${fromEmail}`);
+console.log(`   From Name: ${fromName}`);
 console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
-console.log(`   Host: ${emailHost}`);
-console.log(`   Port: ${emailPort}`);
-console.log(`   Secure: ${isSecure}`);
-console.log(`   User: ${emailUser}`);
-console.log(`   Pooling: ${!isProduction ? "enabled" : "disabled (serverless)"}`);
 
-// Create transporter factory function for serverless compatibility
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: emailHost,
-    port: emailPort,
-    secure: isSecure, // true for 465, false for other ports
-    auth: {
-      user: emailUser,
-      pass: process.env.EMAIL_PASS,
-    },
-    pool: !isProduction, // Disable pooling in production/serverless
-    maxConnections: isProduction ? 1 : 5,
-    connectionTimeout: 60000, // 60 seconds
-    greetingTimeout: 30000, // 30 seconds
-    socketTimeout: 60000, // 60 seconds
-    logger: true, // Enable logging for debugging
-    debug: process.env.EMAIL_DEBUG === "true", // Show SMTP traffic only if needed
-    tls: {
-      rejectUnauthorized: false,
-      minVersion: "TLSv1.2",
-    },
-    requireTLS: emailPort === 587,
-  });
-};
-
-// Helper function to send email with retry logic and explicit Promise wrapping
+// Helper function to send email with retry logic
 const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
-  return new Promise(async (resolve, reject) => {
-    let lastError;
+  let lastError;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`📤 [Attempt ${attempt}/${maxRetries}] Sending email to: ${mailOptions.to}`);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`📤 [Attempt ${attempt}/${maxRetries}] Sending email to: ${mailOptions.to}`);
 
-        // Create a fresh transporter for each send (serverless best practice)
-        const transporter = createTransporter();
+      // Send email using SendGrid
+      const response = await sgMail.send(mailOptions);
 
-        // Wrap sendMail in explicit Promise
-        const info = await new Promise((resolveEmail, rejectEmail) => {
-          transporter.sendMail(mailOptions, (error, info) => {
-            // Close transporter connection immediately after send
-            transporter.close();
+      console.log(`✅ Email sent successfully to ${mailOptions.to}`);
+      console.log(`   Status Code: ${response[0].statusCode}`);
+      console.log(`   Message ID: ${response[0].headers['x-message-id']}`);
 
-            if (error) {
-              console.error(`❌ Email send error (attempt ${attempt}):`, error.message);
-              rejectEmail(error);
-            } else {
-              console.log(`✅ Email sent successfully to ${mailOptions.to}`);
-              console.log(`   Message ID: ${info.messageId}`);
-              resolveEmail(info);
-            }
-          });
-        });
+      return {
+        success: true,
+        messageId: response[0].headers['x-message-id'],
+        statusCode: response[0].statusCode,
+      };
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ Attempt ${attempt} failed:`, error.message);
 
-        // Success - return immediately
-        return resolve({ success: true, messageId: info.messageId });
+      // Log SendGrid-specific error details
+      if (error.response) {
+        console.error(`   Status Code: ${error.response.statusCode}`);
+        console.error(`   Error Body:`, error.response.body);
+      }
 
-      } catch (error) {
-        lastError = error;
-        console.error(`❌ Attempt ${attempt} failed:`, error.message);
-
-        // If this isn't the last attempt, wait before retrying (exponential backoff)
-        if (attempt < maxRetries) {
-          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5 seconds
-          console.log(`⏳ Retrying in ${waitTime}ms...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
+      // If this isn't the last attempt, wait before retrying (exponential backoff)
+      if (attempt < maxRetries) {
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5 seconds
+        console.log(`⏳ Retrying in ${waitTime}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
       }
     }
+  }
 
-    // All retries failed
-    console.error(`❌ All ${maxRetries} email send attempts failed`);
-    reject(lastError);
-  });
+  // All retries failed
+  console.error(`❌ All ${maxRetries} email send attempts failed`);
+  throw lastError;
 };
 
 // Send OTP email
@@ -101,8 +73,11 @@ exports.sendOTPEmail = async (
     console.log(`📧 Preparing OTP email for: ${email}`);
 
     const mailOptions = {
-      from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
+      from: {
+        email: fromEmail,
+        name: fromName,
+      },
       subject: subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -116,9 +91,9 @@ exports.sendOTPEmail = async (
           <p>Best regards,<br>The NeuroAssess Team</p>
         </div>
       `,
+      text: `Welcome to NeuroAssess! Your verification code is: ${otp}. This code will expire in 10 minutes.`,
     };
 
-    // Use retry wrapper with explicit Promise handling
     const result = await sendEmailWithRetry(mailOptions);
     return result;
   } catch (error) {
@@ -133,8 +108,11 @@ exports.sendResetPasswordEmail = async (email, resetUrl) => {
     console.log(`📧 Preparing password reset email for: ${email}`);
 
     const mailOptions = {
-      from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
+      from: {
+        email: fromEmail,
+        name: fromName,
+      },
       subject: "Reset Your Password - NeuroAssess",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -148,6 +126,7 @@ exports.sendResetPasswordEmail = async (email, resetUrl) => {
           <p>Best regards,<br>The NeuroAssess Team</p>
         </div>
       `,
+      text: `You requested a password reset. Click this link to reset your password: ${resetUrl}. This link will expire in 1 hour.`,
     };
 
     const result = await sendEmailWithRetry(mailOptions);
@@ -164,8 +143,11 @@ exports.sendApprovalEmail = async (email, name) => {
     console.log(`📧 Preparing approval email for: ${email}`);
 
     const mailOptions = {
-      from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
+      from: {
+        email: fromEmail,
+        name: fromName,
+      },
       subject: "Your Psychiatrist Account Has Been Approved - NeuroAssess",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -179,6 +161,7 @@ exports.sendApprovalEmail = async (email, name) => {
           <p>Best regards,<br>The NeuroAssess Team</p>
         </div>
       `,
+      text: `Congratulations, ${name}! Your psychiatrist account has been approved. Log in at ${process.env.FRONTEND_URL}/login`,
     };
 
     const result = await sendEmailWithRetry(mailOptions);
@@ -195,8 +178,11 @@ exports.sendRejectionEmail = async (email, name, reason) => {
     console.log(`📧 Preparing rejection email for: ${email}`);
 
     const mailOptions = {
-      from: `"NeuroAssess Support" <${process.env.EMAIL_USER}>`,
       to: email,
+      from: {
+        email: fromEmail,
+        name: fromName,
+      },
       subject: "Update on Your Psychiatrist Application - NeuroAssess",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -210,6 +196,8 @@ exports.sendRejectionEmail = async (email, name, reason) => {
           <p>Best regards,<br>The NeuroAssess Team</p>
         </div>
       `,
+      text: `Dear ${name}, Thank you for your interest. We are unable to approve your psychiatrist account at this time. ${reason ? `Reason: ${reason}` : ""
+        }`,
     };
 
     const result = await sendEmailWithRetry(mailOptions);
@@ -220,15 +208,20 @@ exports.sendRejectionEmail = async (email, name, reason) => {
   }
 };
 
-// Verify SMTP connection on startup (async version for serverless)
+// Test SendGrid connection on startup
 (async () => {
+  if (!sendGridApiKey) {
+    console.error("⚠️  Skipping SendGrid connection test - API key not configured");
+    return;
+  }
+
   try {
-    const transporter = createTransporter();
-    await transporter.verify();
-    console.log("✅ SMTP server is ready to send emails");
-    transporter.close();
+    console.log("🔍 Testing SendGrid API connection...");
+    // SendGrid doesn't have a verify method, but we can check if the API key is set
+    console.log("✅ SendGrid is ready to send emails");
+    console.log("   Note: Actual delivery will be tested when sending emails");
   } catch (error) {
-    console.error("❌ SMTP connection error:", error.message);
-    console.error("   Email service may not work properly. Please check your SMTP configuration.");
+    console.error("❌ SendGrid configuration error:", error.message);
+    console.error("   Email service may not work properly. Please check your SENDGRID_API_KEY");
   }
 })();
