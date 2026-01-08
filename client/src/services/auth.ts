@@ -5,35 +5,14 @@
  */
 
 import axios, { AxiosError } from "axios";
+import api from "./api";
 
-const getApiUrl = () => {
-  const url = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-  return url.endsWith("/api") ? url : `${url.replace(/\/$/, "")}/api`;
-};
-
-const API_URL = getApiUrl();
-
-// Create axios instance
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-  withCredentials: true, // This is important for cookies to be sent
-  timeout: 180000, // 3 minutes timeout (increased to handle server delays)
-});
-
-// Add interceptors for debugging
-api.interceptors.request.use(
-  (config) => {
-    console.log("Auth API Request:", config.url);
-    return config;
-  },
-  (error) => {
-    console.error("Auth API Request Error:", error);
-    return Promise.reject(error);
-  }
-);
+// Use the centralized API instance which already has:
+// 1. Base URL configuration
+// 2. Token interceptors
+// 3. Timeout settings (180s)
+// 4. Error handling
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Common interfaces
 export interface BaseRegisterData {

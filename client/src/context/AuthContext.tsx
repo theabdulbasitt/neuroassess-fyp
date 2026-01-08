@@ -33,15 +33,15 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   currentRole: null,
-  setRole: () => {},
+  setRole: () => { },
   loginPatient: async () => ({}),
   loginPsychiatrist: async () => ({}),
   loginAdmin: async () => ({}),
   registerPatient: async () => ({}),
   registerPsychiatrist: async () => ({}),
   registerAdmin: async () => ({}),
-  logout: async () => {},
-  setUserAfterOTPVerification: async () => {},
+  logout: async () => { },
+  setUserAfterOTPVerification: async () => { },
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -125,6 +125,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("Patient login response:", response);
 
       if (response.success) {
+        // Store token in localStorage if it exists in the response
+        if (response.token) {
+          localStorage.setItem("token", response.token);
+        }
         const currentUser = await authService.getCurrentUser();
         setUser(currentUser);
       }

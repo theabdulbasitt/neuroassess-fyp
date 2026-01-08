@@ -11,93 +11,6 @@ import axios from "axios";
 // Import Navigation directly to ensure it's always available
 import Navigation from "./components/Navigation";
 
-// API connectivity check component
-const ApiConnectivityCheck = () => {
-  const [isConnected, setIsConnected] = useState<boolean | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const apiUrl = import.meta.env.VITE_API_URL;
-  // Extract the base URL without the /api suffix or trailing slash
-  const baseUrl = apiUrl
-    ? apiUrl.replace(/\/api\/?$/, "").replace(/\/$/, "")
-    : "http://localhost:5000";
-
-
-  useEffect(() => {
-    const checkApiConnection = async () => {
-      try {
-        console.log("Checking API connection to:", `${baseUrl}/health`);
-        // Use the base URL for the health check (root level /health exit)
-        const response = await axios.get(`${baseUrl}/health`, {
-          timeout: 180000, // 180 seconds timeout
-        });
-        if (response.data.status === "ok") {
-          setIsConnected(true);
-          setError(null);
-        } else {
-          setIsConnected(false);
-          setError("API is not responding correctly");
-        }
-      } catch (err) {
-        console.error("API connection error:", err);
-        let errorMessage = "Cannot connect to API";
-
-        if (axios.isAxiosError(err)) {
-          if (err.code === "ECONNABORTED") {
-            errorMessage = "API connection timeout";
-          } else if (err.response) {
-            errorMessage = `API error: ${err.response.status}`;
-          } else if (err.request) {
-            errorMessage = "No response from API server";
-          }
-        }
-
-        setIsConnected(false);
-        setError(errorMessage);
-      }
-    };
-
-    checkApiConnection();
-    // Check connection every 60 seconds (optimized from 30s)
-    const interval = setInterval(checkApiConnection, 60000);
-    return () => clearInterval(interval);
-  }, [baseUrl]);
-
-  if (isConnected === null) {
-    return null; // Still checking
-  }
-
-  if (!isConnected) {
-    return (
-      <div className="fixed bottom-4 right-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md z-50">
-        <div className="flex items-center">
-          <div className="py-1">
-            <svg
-              className="h-6 w-6 text-red-500 mr-4"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <div>
-            <p className="font-bold">API Connection Error</p>
-            <p className="text-sm">{error || "Cannot connect to API"}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return null; // Connected successfully, no need to show anything
-};
-
 //buttons page to access all pages from 1 page
 const Buttons = lazy(() => import("./pages/Dummy Buttons"));
 
@@ -173,7 +86,7 @@ function App() {
     <div className="App">
       <AuthProvider>
         <Router>
-          <ApiConnectivityCheck />
+
           <Suspense fallback={<LoadingSpinner />}>
             <div className="min-h-screen">
               <Routes>
