@@ -89,6 +89,7 @@ cd NeuroAssess-FYP
 | Saad Habib   | [@Saadidream](https://github.com/Saadidream)         |
 | Abdul Basit  | [@theabdulbasitt](https://github.com/theabdulbasitt) |
 | Saad Nadeem  | [@Saadnadeem07](https://github.com/Saadnadeem07)     |
+| Nusrat Ullah | [@nusratullah970](https://github.com/nusratullah970) |
 
 ---
 
